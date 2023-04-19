@@ -206,18 +206,30 @@ def keycap(
         .clean()
     )
 
+    if (height - thickness - depth - 1) > 4.5:
+    # Don't generate stem rib if caps are short
+        keycap = (
+            keycap.faces("<Z").transformed(offset=cq.Vector(0, 0, 4.5)).workplane()
+            .pushPoints(stem_pts)
+            .circle(2.75)
+            .extrude(tmpface)
+            .pushPoints(ribh_pts)
+            .rect(tx, 0.8)
+            .extrude(tmpface)
+            .pushPoints(ribv_pts)
+            .rect(0.8, ty)
+            .extrude(tmpface)
+        )
+    else:
+        keycap = (
+            keycap.faces("<Z").transformed(offset=cq.Vector(0, 0, 4.5)).workplane()
+            .pushPoints(stem_pts)
+            .circle(2.75)
+            .extrude(tmpface)
+        )
+
     keycap = (
-        keycap.faces("<Z").transformed(offset=cq.Vector(0, 0, 4.5)).workplane()
-        .pushPoints(stem_pts)
-        .circle(2.75)
-        .extrude(tmpface)
-        .pushPoints(ribh_pts)
-        .rect(tx, 0.8)
-        .extrude(tmpface)
-        .pushPoints(ribv_pts)
-        .rect(0.8, ty)
-        .extrude(tmpface)
-        .faces("<Z").workplane(offset=-0.6)
+        keycap.faces("<Z").workplane(offset=-0.6)
         .pushPoints(stem_pts)
         .circle(2.75)
         .extrude("next")
