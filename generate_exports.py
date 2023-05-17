@@ -7,50 +7,52 @@ keys = {
     # { 'unitX': 1 },
     ],
     1: [
-    # { 'unitX': 1 },
+    { 'unitX': 1 },
     # { 'unitX': 2 }
     ],
     2: [
     { 'unitX': 1 },
-    { 'unitX': 1.25 },
-    { 'unitX': 1.5 },
-    { 'unitX': 1.75 }
+    # { 'unitX': 1.25 },
+    # { 'unitX': 1.5 },
+    # { 'unitX': 1.75 }
     ],
     3: [
     { 'unitX': 1 },
-    { 'unitX': 1, 'depth': 3.6 },
-    { 'unitX': 1.25 },
-    { 'unitX': 1.5  },
-    { 'unitX': 1.75 },
-    { 'unitX': 2.25 }
+    # { 'unitX': 1, 'depth': 3.6 },
+    # { 'unitX': 1.25 },
+    # { 'unitX': 1.5  },
+    # { 'unitX': 1.75 },
+    # { 'unitX': 2.25 }
     ],
     4: [
     { 'unitX': 1 },
-    { 'unitX': 1.25 },
-    { 'unitX': 1.5 },
-    { 'unitX': 1.75 },
-    { 'unitX': 2 },
-    { 'unitX': 2.25 },
-    { 'unitX': 1.25   , 'convex': True },
-    { 'unitX': 1.5    , 'convex': True },
-    { 'unitX': 1.75   , 'convex': True },
-    { 'unitX': 2      , 'convex': True },
-    { 'unitX': 2.25   , 'convex': True },
-    { 'unitX': 2.75   , 'convex': True },
+    # { 'unitX': 1.25 },
+    # { 'unitX': 1.5 },
+    # { 'unitX': 1.75 },
+    # { 'unitX': 2 },
+    # { 'unitX': 2.25 },
+    # { 'unitX': 1.25   , 'convex': True },
+    # { 'unitX': 1.5    , 'convex': True },
+    # { 'unitX': 1.75   , 'convex': True },
+    # { 'unitX': 2      , 'convex': True },
+    # { 'unitX': 2.25   , 'convex': True },
+    # { 'unitX': 2.75   , 'convex': True },
+    # { 'unitX': 3.00   , 'convex': True },
     ],
     5: [
-    { 'unitX': 1 },
-    { 'unitX': 1.25 },
-    { 'unitX': 1.5 },
-    { 'unitX': 1.75 },
-    { 'unitX': 1.25, 'convex': True },
-    { 'unitX': 1.5 , 'convex': True },
-    { 'unitX': 1.75, 'convex': True },
-    { 'unitX': 2   , 'convex': True },
-    { 'unitX': 2.25   , 'convex': True },
-    { 'unitX': 2.75   , 'convex': True },
-    { 'unitX': 6.25, 'convex': True },
-    { 'unitX': 7, 'convex': True }
+    { 'unitX': 1   },
+    # { 'unitX': 1.25},
+    # { 'unitX': 1.50},
+    # { 'unitX': 1.75},
+    # { 'unitX': 1.25, 'convex': True },
+    # { 'unitX': 1.5 , 'convex': True },
+    # { 'unitX': 1.75, 'convex': True },
+    # { 'unitX': 2   , 'convex': True },
+    # { 'unitX': 2.25, 'convex': True },
+    # { 'unitX': 2.75, 'convex': True },
+    # { 'unitX': 3   , 'convex': True },
+    # { 'unitX': 6.25, 'convex': True },
+    # { 'unitX': 7   , 'convex': True }
     ]
 }
 
@@ -64,37 +66,43 @@ rows = [
     {'angle': 0,  'height': 11.5, 'keys': keys[5] },      # row 5, bottom row
 ]
 
-assy = cq.Assembly()
+def export_keys(key_rows=rows, export=False, export_assy=False):
+    assy = cq.Assembly()
 
-y = 0
-for i, r in enumerate(rows):
-    x = 0
-    for k in r['keys']:
-        name = "row{}_U{}".format(i,k['unitX'])
-        convex = False
-        if 'convex' in k:
-            convex = k['convex']
-            name+= "_convex"
+    y = 0
+    for i, r in enumerate(key_rows):
+        x = 0
+        for k in r['keys']:
+            name = "row{}_U{}".format(i,k['unitX'])
+            convex = False
+            if 'convex' in k:
+                convex = k['convex']
+                name+= "_convex"
 
-        depth = 2.8
-        if 'depth' in k:
-            if k['depth'] > depth: name+= "_homing"
-            depth = k['depth']
+            depth = 2.8
+            if 'depth' in k:
+                if k['depth'] > depth: name+= "_homing"
+                depth = k['depth']
 
-        print("Generating: ", name)
-        cap = opk.keycap(angle=r['angle'], height=r['height'], unitX=k['unitX'], convex=convex, depth=depth)
-        # Export one key at the time
-        exporters.export(cap, './export/STEP/' + name + '.step')
-        exporters.export(cap, './export/STL/' + name + '.stl', tolerance=0.001, angularTolerance=0.05)
-        w = 19.05 * k['unitX'] / 2
-        x+= w
-        assy.add(cap, name=name, loc=cq.Location(cq.Vector(x,y,0)))
-        x+= w
-    y -= 19.05
+            print("Generating: ", name)
+            cap = opk.keycap(angle=r['angle'], height=r['height'], unitX=k['unitX'], convex=convex, depth=depth, tFillet=4)
+            # Export one key at the time
 
-if 'show_object' in locals():
-    show_object(assy)
+            if export:
+                exporters.export(cap, './export/STEP/' + name + '.step')
+                exporters.export(cap, './export/STL/' + name + '.stl', tolerance=0.001, angularTolerance=0.05)
+            w = 19.05 * k['unitX'] / 2
+            x+= w
+            assy.add(cap, name=name, loc=cq.Location(cq.Vector(x,y,0)))
+            x+= w
+        y -= 19.05
 
-# Export the whole assembly, very handy especially for STEP
-#exporters.export(assy.toCompound(), 'keycaps.stl', tolerance=0.001, angularTolerance=0.05)
-#exporters.export(assy.toCompound(), 'keycaps.step')
+    if 'show_object' in locals():
+        show_object(assy)
+
+    if export_assy:
+        exporters.export(assy.toCompound(), 'opk_keycaps.stl', tolerance=0.001, angularTolerance=0.05)
+        exporters.export(assy.toCompound(), 'opk_keycaps.step')
+
+    return assy
+
