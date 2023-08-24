@@ -19,266 +19,321 @@ spherical top keycaps.
 If you use the code please give credit, if you do modifications consider 
 releasing them back to the public under a permissive open source license.
 
+Copyright 2023 sporkus
 Copyright (c) 2022 Matteo "Matt3o" Spinelli
 https://matt3o.com
 """
 
 import math
 import cadquery as cq
+from typing import List, Optional, Tuple, Union
 
-def keycap(
-    unitX: float = 1,           # keycap size in unit. Standard sizes: 1, 1.25, 1.5, ...
-    unitY: float = 1,
-    base: float = 18.2,         # 1-unit size in mm at the base
-    top: float = 13.2,          # 1-unit size in mm at the top, actual hitting area will be slightly bigger
-    curv: float = 1.7,          # Top side curvature. Higher value makes the top rounder (use small increments)
-    bFillet: float = 0.5,       # Fillet at the base
-    tFillet: float = 5,         # Fillet at the top
-    height: float = 13,         # Height of the keycap before cutting the scoop (final height is lower)
-    angle: float = 7,           # Angle of the top surface
-    depth: float = 2.8,         # Scoop depth
-    thickness: float = 1.5,     # Keycap sides thickness
-    convex: bool = False,       # Is this a spacebar?
-    legend: str = "",           # Legend
-    legendDepth: float = -1.0,  # How deep to carve the legend, positive value makes the legend embossed
-    font: str = "sans-serif",   # font name, use a font name including extension to use a local file
-    fontsize: float = 10,       # the font size is in units
-    pos: bool = False           # use POS style stabilizers
-):
+unit_x: float = 2  # keycap size in unit. Standard sizes: 1, 1.25, 1.5, ...
+unit_y: float = 1
+base_dim: float = 18.2  # 1-unit size in mm at the base
+top_dim: float = 12.5  # 1-unit size in mm at the top
+b_fillet: float = 0.5  # side Fillet at the base
+t_fillet: float = 3.5  # side Fillet at the top
+s_fillet: float = 0.9    # surface fillet
+height: float = 9  # Height of the keycap before cutting the scoop 
+angle: float = 2  # Angle of the top surface
+depth: float = 2.5  # Scoop depth
+thickness: float = 1.5  # Keycap sides thickness
+convex: bool = True  # Is this a spacebar?
+pos: bool = False  # use POS style stabilizers
 
-    top_diff = base - top
 
-    curv = min(curv, 1.9)
+def calc_base_dim(unit_x, unit_y, base_dim):
+    """
+    calculate dimensions of keycap at the bottom
+    """
 
-    bx = 19.05 * unitX - (19.05 - base)
-    by = 19.05 * unitY - (19.05 - base)
+    def dim(unit):
+        return 19.05 * unit - (19.05 - base_dim)
 
-    tx = bx - top_diff
-    ty = by - top_diff
+    return [dim(unit_x), dim(unit_y)]
 
-    # if spacebar make the top less round-y
-    tension = .4 if convex else 1
 
-    if unitX < 2 and unitY < 2:
-        pos = False
+def calc_top_dim(base_dims, top_dim):
+    """
+    calculate dimensions of keycap at the top, before tilting and cutting the scoop
+    """
+    diff = min(base_dims) - top_dim
+    return [x - diff for x in base_dims]
 
-    # Three-section loft of rounded rectangles. Can't find a better way to do variable fillet
-    base = (
-        cq.Sketch()
-        .rect(bx, by)
-        .vertices()
-        .fillet(bFillet)
-    )
 
-    mid = (
-        cq.Sketch()
-        .rect(bx, by)
-        .vertices()
-        .fillet((tFillet-bFillet)/3)
-    )
+def rounded_rect(w: float, h: float, radius: float) -> cq.Sketch:
+    return cq.Sketch().rect(w, h).vertices().fillet(radius)
 
-    top = (
-        cq.Sketch()
-        .arc((curv, curv*tension), (0, ty/2), (curv, ty-curv*tension))
-        .arc((curv, ty-curv*tension), (tx/2, ty), (tx-curv, ty-curv*tension))
-        .arc((tx-curv, ty-curv*tension), (tx, ty/2), (tx-curv, curv*tension))
-        .arc((tx-curv, curv*tension), (tx/2, 0), (curv, curv*tension))
-        .assemble()
-        .vertices()
-        .fillet(tFillet)
-        .moved(cq.Location(cq.Vector(-tx/2, -ty/2, 0)))
-    )
 
-    # Main shape
-    keycap = (
+def make_keycap_shell(
+    base_dims: List[float],
+    b_fillet: float,
+    top_dims: List[float],
+    t_fillet: float,
+    height: float,
+    angle: float,
+) -> cq.Workplane:
+    if t_fillet < b_fillet:
+        t_fillet = b_fillet + 1
+
+    base = rounded_rect(*base_dims, b_fillet)
+    mid = rounded_rect(*base_dims, (t_fillet - b_fillet) / 4)
+    top = rounded_rect(*top_dims, t_fillet)
+
+    return (
         cq.Workplane("XY")
-        .placeSketch(base,
-                    mid.moved(cq.Location(cq.Vector(0, 0, height/4), cq.Vector(1,0,0), angle/4)),
-                    top.moved(cq.Location(cq.Vector(0, 0, height), cq.Vector(1,0,0), angle))
-                    )
+        .placeSketch(
+            base,
+            mid.moved(
+                cq.Location(cq.Vector(0, 0, height / 4), cq.Vector(1, 0, 0), angle / 4)
+            ),
+            top.moved(cq.Location(cq.Vector(0, 0, height), cq.Vector(1, 0, 0), angle)),
+        )
         .loft()
     )
 
-    # Create a body that will be carved from the main shape to create the top scoop
+def saddle(x:float, w:float=1, h:float=1, steepness:int=1, convex:int=-1):
+    if steepness <= 0:
+        raise ValueError("steepness should be integers > 0")
+
+    steepness *= 2
+    return x, -convex * math.atan((x / w) ** steepness) * h / 1.55
+
+
+def make_scoop(base_x, base_y, height, angle, convex=False) -> cq.Workplane:
+    """
+    Create a body that will be carved from the main shape to create the top scoop
+    """
     if convex:
         scoop = (
-            cq.Workplane("YZ").transformed(offset=cq.Vector(0, height-2.1, -bx/2), rotate=cq.Vector(0, 0, angle))
-            .moveTo(-by/2, -1)
-            .threePointArc((0, 2), (by/2, -1))
-            .lineTo(by/2, 10)
-            .lineTo(-by/2, 10)
+            cq.Workplane("YZ")
+            .transformed(
+                offset=cq.Vector(0, height - 2.1, -base_x / 2),
+                rotate=cq.Vector(0, 0, angle),
+            )
+            .moveTo(-base_y / 2, -1)
+            .threePointArc((0, 2), (base_y / 2, -1))
+            .lineTo(base_y / 2, 10)
+            .lineTo(-base_y / 2, 10)
             .close()
-            .extrude(bx, combine=False)
+            .extrude(base_x, combine=False)
         )
     else:
         scoop = (
-            cq.Workplane("YZ").transformed(offset=cq.Vector(0, height, bx/2), rotate=cq.Vector(0, 0, angle))
-            .moveTo(-by/2+2,0)
-            .threePointArc((0, min(-0.1, -depth+1.5)), (by/2-2, 0))
-            .lineTo(by/2, height)
-            .lineTo(-by/2, height)
+            cq.Workplane("YZ")
+            .transformed(
+                offset=cq.Vector(0, height, base_x / 2), rotate=cq.Vector(0, 0, angle)
+            )
+            .moveTo(-base_y / 2 + 2, 0)
+            .threePointArc((0, min(-0.1, -depth + 1.5)), (base_y / 2 - 2, 0))
+            .lineTo(base_y / 2, height)
+            .lineTo(-base_y / 2, height)
             .close()
-            .workplane(offset=-bx/2)
-            .moveTo(-by/2-2, -0.5)
-            .threePointArc((0, -depth), (by/2+2, -0.5))
-            .lineTo(by/2, height)
-            .lineTo(-by/2, height)
+            .workplane(offset=-base_x / 2)
+            .moveTo(-base_y / 2 - 2, -0.5)
+            .threePointArc((0, -depth), (base_y / 2 + 2, -0.5))
+            .lineTo(base_y / 2, height)
+            .lineTo(-base_y / 2, height)
             .close()
-            .workplane(offset=-bx/2)
-            .moveTo(-by/2+2, 0)
-            .threePointArc((0, min(-0.1, -depth+1.5)), (by/2-2, 0))
-            .lineTo(by/2, height)
-            .lineTo(-by/2, height)
+            .workplane(offset=-base_x / 2)
+            .moveTo(-base_y / 2 + 2, 0)
+            .threePointArc((0, min(-0.1, -depth + 1.5)), (base_y / 2 - 2, 0))
+            .lineTo(base_y / 2, height)
+            .lineTo(-base_y / 2, height)
             .close()
             .loft(combine=False)
         )
+    return scoop
 
-    #show_object(tool, options={'alpha': 0.4})
-    keycap = keycap - scoop
-    
-    # Top edge fillet
-    keycap = keycap.edges(">Z").fillet(0.6)
 
-    # Since the shell() function is not able to deal with complex shapes
-    # we need to subtract a smaller keycap from the main shape
-    shell = (
-        cq.Workplane("XY").rect(bx-thickness*2, by-thickness*2)
-        .workplane(offset=height/4).rect(bx-thickness*3, by-thickness*3)
-        .workplane().transformed(offset=cq.Vector(0, 0, height-height/4-4.5), rotate=cq.Vector(angle, 0, 0)).rect(tx-thickness*2+.5, ty-thickness*2+.5)
-        .loft()
+def make_noodle_scoop(top_x:float, top_y:float, translate_z:float) -> cq.Workplane:
+    yz_wire = (
+        cq.Workplane("YZ")
+        .transformed(offset=(0,-2))
+        .parametricCurve(lambda x: saddle(x, w=top_y, h=height,steepness=4, convex=1), start=-top_y, stop=top_y) 
     )
-    keycap = keycap - shell
 
-    # create a temporary surface that will be used to project the stems to
-    # this is needed because extrude(face) needs the entire extruded outline to be contained inside the destination face
-    tmpface = shell.faces('>Z').workplane().rect(bx*2, by*2).val()
-    tmpface = cq.Face.makeFromWires(tmpface)
+    scoop = (
+        cq.Workplane("XZ")
+        .parametricCurve(lambda x: saddle(x, w=top_x, h=height,steepness=2), start=-top_x, stop=top_y, makeWire=False)
+        .close()
+        .sweep(yz_wire)
+        .translate((0, 0, translate_z))
+    )
 
-    # Build the stem and the keycap guts
+    return scoop
 
-    if pos:     # POS-like stems
-        stem_pts = []
-        ribh_pts = []
-        ribv_pts = []
 
-        stem_num_x = math.floor(unitX)
-        stem_num_y = math.floor(unitY)
+def calc_stem_points(unit_x, unit_y, pos=False) -> List[float]:
+    """
+    finds the locations of stems
+    """
+    stem_pts = []
+
+    if unit_x < 2 and unit_y < 2:
+        pos = False
+
+    if not pos:  # standard stems
+        stem_pts = [(0, 0)]
+        width = unit_x if unit_x >= unit_y else unit_y
+        if width > 2.75:
+            dist = width / 2 * 19.05 - 19.05 / 2
+            stem_pts.extend([(dist, 0), (-dist, 0)])
+        elif width > 1.75:  # keycaps smaller than 3unit all have 2.25 stabilizers
+            dist = 2.25 / 2 * 19.05 - 19.05 / 2
+            stem_pts.extend([(dist, 0), (-dist, 0)])
+
+        # flip x/y for vertical keys
+        if unit_y > unit_x:
+            stem_pts = [(y, x) for x, y in stem_pts]
+
+    elif pos:  # POS-like stems
+        stem_num_x = math.floor(unit_x)
+        stem_num_y = math.floor(unit_y)
         stem_start_x = round(-19.05 * (stem_num_x / 2) + 19.05 / 2, 6)
         stem_start_y = round(-19.05 * (stem_num_y / 2) + 19.05 / 2, 6)
 
         for i in range(0, stem_num_y):
-            ribh_pts.extend([(0, stem_start_y+i*19.05)])
             for l in range(0, stem_num_x):
-                if i == 0:
-                    ribv_pts.extend([(stem_start_x+l*19.05, 0)])
-                stem_pts.extend([(stem_start_x+l*19.05, stem_start_y+i*19.05)])
+                stem_pts.extend([(stem_start_x + l * 19.05, stem_start_y + i * 19.05)])
 
-    else:       # standard stems
-        stem_pts = [(0,0)]
+    stem_pts.sort(key=lambda x: sum(x))
 
-        if ( unitY > unitX ):
-            if unitY > 2.75:
-                dist = unitY / 2 * 19.05 - 19.05 / 2
-                stem_pts.extend([(0, dist), (0, -dist)])
-            elif unitY > 1.75:
-                dist = 2.25 / 2 * 19.05 - 19.05 / 2
-                stem_pts.extend([(0, -dist), (0, dist)])
-            
-            ribh_pts = stem_pts
-            ribv_pts = [(0,0)]
-        else:
-            if unitX > 2.75:
-                dist = unitX / 2 * 19.05 - 19.05 / 2
-                stem_pts.extend([(dist, 0), (-dist,0)])
-            elif unitX > 1.75:      # keycaps smaller than 3unit all have 2.25 stabilizers
-                dist = 2.25 / 2 * 19.05 - 19.05 / 2
-                stem_pts.extend([(dist, 0), (-dist,0)])
-            
-            ribh_pts = [(0,0)]
-            ribv_pts = stem_pts
+    return stem_pts
 
-    # this is the stem +
-    stem2 = (
+
+def make_cherry_stem() -> cq.Workplane:
+    """
+    makes a single cherry stem with supporting ribs
+    """
+    stem_dia = 2.75
+    rib_thickness = 0.8
+    stem_z_inset = 0.6
+    cross_horiz = [4.15, 1.27]
+    cross_vert = [1.12, 4.15]
+    rib_z = 4.5
+
+    cross_sketch = cq.Sketch().rect(*cross_horiz).rect(*cross_vert).clean()
+    rib_sketch = (
         cq.Sketch()
-        .push(stem_pts)
-        .rect(4.15, 1.27)
-        .rect(1.12, 4.15)
+        .circle(stem_dia)
+        .rect(100, rib_thickness)
+        .rect(rib_thickness, 100)
         .clean()
     )
 
-    if (height - thickness - depth - 1) > 4.5:
-    # Don't generate stem rib if caps are short
-        keycap = (
-            keycap.faces("<Z").transformed(offset=cq.Vector(0, 0, 4.5)).workplane()
-            .pushPoints(stem_pts)
-            .circle(2.75)
-            .extrude(tmpface)
-            .pushPoints(ribh_pts)
-            .rect(tx, 0.8)
-            .extrude(tmpface)
-            .pushPoints(ribv_pts)
-            .rect(0.8, ty)
-            .extrude(tmpface)
-        )
-    else:
-        keycap = (
-            keycap.faces("<Z").transformed(offset=cq.Vector(0, 0, 4.5)).workplane()
-            .pushPoints(stem_pts)
-            .circle(2.75)
-            .extrude(tmpface)
-        )
-
-    keycap = (
-        keycap.faces("<Z").workplane(offset=-0.6)
-        .pushPoints(stem_pts)
-        .circle(2.75)
-        .extrude("next")
+    return (
+        cq.Workplane()
+        .circle(stem_dia)
+        .extrude(rib_z - stem_z_inset)
+        .faces(">Z")
+        .workplane()
+        .placeSketch(rib_sketch)
+        .extrude(20)
         .faces("<Z")
-        .placeSketch(stem2)
+        .workplane()
+        .placeSketch(cross_sketch)
         .extrude(-4.6, combine="cut")
-        .faces(">Z[1]").edges("|X or |Y")
+        .faces("<Z")
+        .edges()
         .chamfer(0.2)
+        .translate([0, 0, stem_z_inset])
     )
 
-    # Add the legend if present
-    if legend and legendDepth != 0:
-        fontPath = ''
-        if font.endswith((".otf", ".ttf", ".ttc")):
-            fontPath = font
-            font = ''
 
-        if legend.endswith('.dxf'):
-            legend = (
-                cq.importers
-                .importDXF(legend)
-                .wires().toPending()
-                .extrude(-4)
-                .translate((0,0,height+1))
-                .rotateAboutCenter((1,0,0), angle)
-            )
-            # center the legend
-            bb = legend.val().BoundingBox()
-            legend = legend.translate((-bb.center.x, -bb.center.y, 0))
+def make_alps_stem() -> cq.Workplane:
+    """
+    makes a single alps stem with supporting ribs
+    """
+    alps_stem_dims = [4.35, 2.1]
+    rib_thickness = 0.8
+    rib_z = 5.4
+
+    rib_sketch = cq.Sketch().rect(100, rib_thickness).rect(rib_thickness, 100).clean()
+
+    return (
+        cq.Workplane()
+        .rect(*alps_stem_dims)
+        .extrude(20)
+        .faces("<Z")
+        .shell(-0.7)
+        .faces(">X or <X or >Y or <Y")
+        .edges()
+        .chamfer(0.2)
+        .faces("<Z")
+        .workplane()
+        .transformed(offset=[0, 0, -rib_z])
+        .placeSketch(rib_sketch)
+        .extrude(-20)
+    )
+
+
+def make_stems(unit_x: float, unit_y: float, pos: bool, type="cherry"):
+    """
+    make multiple stems based on keysize
+    """    
+    stem_pts = calc_stem_points(unit_x, unit_y, pos)
+
+    if type not in ["cherry", "alps"]:
+        raise TypeError('stem type must be one of ["cherry", "alps"]')
+
+    stems = cq.Workplane()
+    for pt in stem_pts:
+        if pt == (0, 0) and type == "alps":
+            stem = make_alps_stem().translate(pt)
         else:
-            legend = (
-                cq.Workplane("XY").transformed(offset=cq.Vector(0, 0, height+1), rotate=cq.Vector(angle, 0, 0))
-                .text(legend, fontsize, -4, font=font, fontPath=fontPath, halign="center", valign="center")
-            )
-            bb = legend.val().BoundingBox()
-            # only center horizontally to keep the baseline
-            legend = legend.translate((-bb.center.x, 0, 0))
-        
-        if legendDepth < 0:
-            legend = legend - keycap
-            legend = legend.translate((0,0,legendDepth))
-            keycap = keycap - legend
-            legend = legend - scoop      # this can be used to export the legend for 2 colors 3D printing
-        else:
-            scoop = scoop.translate((0,0,legendDepth))
-            legend = legend - scoop
-            legend = legend - keycap    # use this for multi-color 3D printing
-            keycap = keycap + legend
+            stem = make_cherry_stem().translate(pt)
+        stems = stems.union(stem)
 
-        #show_object(legend, name="legend", options={'color': 'blue', 'alpha': 0})
+    return stems
 
-    return keycap
+
+def make_keycap(
+    unit_x: float = unit_x,
+    unit_y: float = unit_y,
+    base_dim: float = base_dim,
+    top_dim: float = top_dim,
+    b_fillet: float = b_fillet,
+    t_fillet: float = t_fillet,
+    s_fillet: float = s_fillet,
+    height: float = height,
+    depth: float = depth,
+    angle: float = depth,
+    convex: bool = convex,
+    pos: bool = False,
+    stem_type="cherry",
+):
+    base_dims = calc_base_dim(unit_x, unit_y, base_dim)
+    top_dims = calc_top_dim(base_dims, top_dim)
+    base_inner_dims = [x - thickness for x in base_dims]
+    top_inner_dims = [x - thickness for x in top_dims]
+
+    scoop = make_scoop(*base_dims, height, angle, convex)
+    if convex:
+        t_fillet = t_fillet * 0.7
+
+    inner_shell = make_keycap_shell(
+        base_inner_dims, b_fillet, top_inner_dims, t_fillet, height - depth - thickness, angle
+    )
+
+    outer_shell = (
+        make_keycap_shell(base_dims, b_fillet, top_dims, t_fillet, height, angle)
+        .cut(scoop)
+        .faces(">Z")
+        .edges()
+    )
+
+    filleted = False
+    surface_fillet = s_fillet
+    while not filleted:
+        try:
+            outer_shell = outer_shell.fillet(surface_fillet)
+            filleted = True
+        except:
+            surface_fillet -= 0.1
+
+    stems = make_stems(unit_x, unit_y, pos, type=stem_type).intersect(outer_shell)
+    keycap = outer_shell - inner_shell + stems
+
+    return keycap 
