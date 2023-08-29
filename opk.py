@@ -101,7 +101,7 @@ def saddle(x:float, w:float=1, h:float=1, steepness:int=1, convex:int=-1):
     return x, -convex * math.atan((x / w) ** steepness) * h / 1.55
 
 
-def make_scoop(base_x, base_y, height, angle, convex=False) -> cq.Workplane:
+def make_scoop(base_x, base_y, height, depth, angle, convex=False) -> cq.Workplane:
     """
     Create a body that will be carved from the main shape to create the top scoop
     """
@@ -112,8 +112,8 @@ def make_scoop(base_x, base_y, height, angle, convex=False) -> cq.Workplane:
                 offset=cq.Vector(0, height - 2.1, -base_x / 2),
                 rotate=cq.Vector(0, 0, angle),
             )
-            .moveTo(-base_y / 2, -1)
-            .threePointArc((0, 2), (base_y / 2, -1))
+            .moveTo(-base_y / 2, 0)
+            .threePointArc((0, depth), (base_y / 2, 0))
             .lineTo(base_y / 2, 10)
             .lineTo(-base_y / 2, 10)
             .close()
@@ -309,7 +309,7 @@ def make_keycap(
     base_inner_dims = [x - thickness for x in base_dims]
     top_inner_dims = [x - thickness for x in top_dims]
 
-    scoop = make_scoop(*base_dims, height, angle, convex)
+    scoop = make_scoop(*base_dims, height, depth, angle, convex)
     if convex:
         t_fillet = t_fillet * 0.7
 
